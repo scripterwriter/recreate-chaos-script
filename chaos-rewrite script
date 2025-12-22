@@ -1,0 +1,752 @@
+-- Gui to Lua
+-- Version: 3.2
+
+-- Instances:
+
+local ScreenGui = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local TextButton = Instance.new("TextButton")
+
+--Properties:
+
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+Frame.Parent = ScreenGui
+Frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Frame.BorderColor3 = Color3.fromRGB(50, 50, 50)
+Frame.BorderSizePixel = 0
+Frame.Position = UDim2.new(0.862282872, 0, 0.0317460336, 0)
+Frame.Size = UDim2.new(0, 206, 0, 180)
+
+TextButton.Parent = Frame
+TextButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TextButton.BackgroundTransparency = 1.000
+TextButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TextButton.BorderSizePixel = 0
+TextButton.Size = UDim2.new(0, 206, 0, 180)
+TextButton.Font = Enum.Font.SourceSans
+TextButton.Text = "Chaos Script"
+TextButton.TextColor3 = Color3.fromRGB(167, 167, 167)
+TextButton.TextScaled = true
+TextButton.TextSize = 14.000
+TextButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+TextButton.TextWrapped = true
+TextButton.MouseButton1Down:Connect(function()
+	game.GetService("VirtualInputManager"):SendKeyEvent(true, "F6" , false , game)
+end)
+
+	-- 🌌 LOAD KAVO LIBRARY
+	local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+	local Window = Library.CreateLib("Chaos Script", "BloodTheme")
+	local Tab = Window:NewTab("🏠Home🏠")
+	local Section = Tab:NewSection("Hitbox Control")
+
+
+-- ===== FIXED HITBOX SYSTEM ===== --
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+getgenv().HitboxEnabled = false
+getgenv().HitboxSize = 10
+getgenv().HitboxColor = Color3.fromRGB(255, 0, 0)
+
+-- Apply hitbox to a character
+local function ApplyHitbox(char)
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	if getgenv().HitboxEnabled then
+		hrp.Size = Vector3.new(getgenv().HitboxSize, getgenv().HitboxSize, getgenv().HitboxSize)
+		hrp.Transparency = 0.8
+		hrp.Color = getgenv().HitboxColor
+		hrp.CanCollide = false
+	else
+		-- Reset if disabled
+		hrp.Size = Vector3.new(2, 2, 1)
+		hrp.Transparency = 2
+	end
+end
+
+-- Apply hitbox to all enemy players
+local function UpdateAll()
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			if plr.Character then
+				ApplyHitbox(plr.Character)
+			end
+		end
+	end
+end
+
+-- Reapply when players spawn
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function(char)
+		wait(0.5)
+		ApplyHitbox(char)
+	end)
+end)
+
+-- Constant update
+RunService.RenderStepped:Connect(function()
+	UpdateAll()
+end)
+
+-- ===== CONNECT TO KAVO UI ===== --
+
+Section:NewToggle("Enable Hitbox", "Turns on hitbox expander", function(state)
+	getgenv().HitboxEnabled = state
+end)
+
+Section:NewTextBox("Hitbox Size", "Type any number for hitbox size", function(value)
+    local num = tonumber(value)
+    if num then
+        getgenv().HitboxSize = num
+    end
+end)
+
+Section:NewColorPicker("Hitbox Color", "Changes hitbox color", Color3.fromRGB(255,0,0), function(color)
+	getgenv().HitboxColor = color
+end)
+
+
+
+	Section:NewLabel("Others")
+
+
+	Section:NewButton("Aimbot", "It aims people", function()
+		local Players = game:GetService("Players")
+		local RunService = game:GetService("RunService")
+		local UserInputService = game:GetService("UserInputService")
+		local Camera = workspace.CurrentCamera
+		local StarterGui = game:GetService("StarterGui")
+		local LocalPlayer = Players.LocalPlayer
+
+		local AimbotEnabled = false
+		local AimKey = Enum.KeyCode.R
+		local AimRadius = 200
+		local Target = nil
+		local LostTargetTime = 0
+		local TargetLossDelay = 0.5
+
+		local ESP_Box = Drawing.new("Square")
+		ESP_Box.Thickness = 1
+		ESP_Box.Color = Color3.fromRGB(255, 255, 255)
+		ESP_Box.Visible = false
+		ESP_Box.Transparency = 1
+		ESP_Box.Filled = false
+
+		local ESP_Text = Drawing.new("Text")
+		ESP_Text.Size = 16
+		ESP_Text.Center = true
+		ESP_Text.Outline = true
+		ESP_Text.Color = Color3.fromRGB(255, 255, 255)
+		ESP_Text.Visible = false
+
+		local function Notify(title, text, duration)
+			pcall(function()
+				StarterGui:SetCore("SendNotification", {
+					Title = title,
+					Text = text,
+					Duration = duration or 3
+				})
+			end)
+		end
+
+		local function IsEnemy(player)
+			if LocalPlayer.Team and player.Team then
+				return LocalPlayer.Team ~= player.Team
+			end
+			return true
+		end
+
+		local function GetNearestPlayerWithinRadius()
+			local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+			local closestPlayer = nil
+			local closestDistance = math.huge
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer and IsEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+					local humanoidRootPart = player.Character.HumanoidRootPart
+					local screenPosition, onScreen = Camera:WorldToScreenPoint(humanoidRootPart.Position)
+
+					if onScreen then
+						local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - screenCenter).Magnitude
+						if distance <= AimRadius and distance < closestDistance then
+							closestDistance = distance
+							closestPlayer = player
+						end
+					end
+				end
+			end
+
+			return closestPlayer
+		end
+
+		local function AimAt(targetPart)
+			if targetPart then
+				Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+			end
+		end
+
+		UserInputService.InputBegan:Connect(function(input, isProcessed)
+			if isProcessed then return end
+			if input.KeyCode == AimKey then
+				AimbotEnabled = not AimbotEnabled
+				ESP_Box.Visible = false
+				ESP_Text.Visible = false
+				if AimbotEnabled then
+					Notify("Aimbot", "Aimbot Enabled", 3)
+				else
+					Notify("Aimbot", "Aimbot Disabled", 3)
+					Target = nil
+				end
+			end
+		end)
+
+		RunService.RenderStepped:Connect(function(dt)
+			if AimbotEnabled then
+				local valid = Target and Target.Character and Target.Character:FindFirstChild("HumanoidRootPart") and Target.Character:FindFirstChild("Head") and Target.Character:FindFirstChildOfClass("Humanoid") and Target.Character:FindFirstChildOfClass("Humanoid").Health > 0
+
+				if not valid then
+					LostTargetTime += dt
+					if LostTargetTime >= TargetLossDelay then
+						local oldTarget = Target
+						Target = GetNearestPlayerWithinRadius()
+						LostTargetTime = 0
+						if oldTarget and Target and Target ~= oldTarget then
+							Notify("Aimbot", "Your target has left the game or teleported too fast.\nNow aiming at: " .. (Target.DisplayName or Target.Name), 3)
+						end
+					end
+				else
+					LostTargetTime = 0
+				end
+
+				if Target and Target.Character then
+					local hrp = Target.Character:FindFirstChild("HumanoidRootPart")
+					local head = Target.Character:FindFirstChild("Head")
+					local humanoid = Target.Character:FindFirstChildOfClass("Humanoid")
+
+					if hrp and head and humanoid then
+						AimAt(hrp)
+
+						local hrpPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+						local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+						local footPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+
+						if onScreen then
+							local boxHeight = math.abs(headPos.Y - footPos.Y)
+							local boxWidth = boxHeight / 2
+							ESP_Box.Position = Vector2.new(hrpPos.X - boxWidth / 2, headPos.Y)
+							ESP_Box.Size = Vector2.new(boxWidth, boxHeight)
+							ESP_Box.Visible = true
+
+							local studs = (Camera.CFrame.Position - hrp.Position).Magnitude
+							ESP_Text.Text = string.format("Name: %s | Health: %d | Studs: %.0f", Target.Name, humanoid.Health, studs)
+							ESP_Text.Position = Vector2.new(hrpPos.X, headPos.Y - 20)
+							ESP_Text.Visible = true
+						else
+							ESP_Box.Visible = false
+							ESP_Text.Visible = false
+						end
+					else
+						ESP_Box.Visible = false
+						ESP_Text.Visible = false
+					end
+				else
+					ESP_Box.Visible = false
+					ESP_Text.Visible = false
+				end
+			else
+				ESP_Box.Visible = false
+				ESP_Text.Visible = false
+			end
+		end)
+
+		Notify("Aimbot", "Aimbot Initialized. Press 'R' to toggle. (OR WHATEVER KEYBIND YOU HAS SET)", 5)
+	end)
+
+
+	Section:NewButton("Remove Halloween", "It removes halloween logo", function()
+		function RemoveEvent()
+			local evento = game.Players.LocalPlayer.PlayerGui:FindFirstChild("Event!")
+			if evento then
+				evento:Destroy()
+			end
+		end
+
+		RemoveEvent()
+
+		game.Players.LocalPlayer.CharacterAdded:Connect(function()
+			wait(0.5)
+			RemoveEvent()
+		end)
+	end)
+
+
+	-- 🌌 SETTINGS
+	local dashPower = 100
+	local dashDuration = 0.3
+	local jumpBoost = 2
+	local jumpBoostDuration = 1
+	local jumpBoostActive = false
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+
+	-- 🌌 DASH FUNCTION
+	local function doDash()
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hrp or not hum then return end
+
+		-- Jump boost
+		if not jumpBoostActive then
+			jumpBoostActive = true
+			local originalJP = hum.JumpPower
+			hum.JumpPower = originalJP + jumpBoost
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+
+			task.delay(jumpBoostDuration, function()
+				if hum then
+					hum.JumpPower = originalJP
+				end
+				jumpBoostActive = false
+			end)
+		end
+
+		-- Side dash
+		local moveDir = hum.MoveDirection
+		local rightVec = hrp.CFrame.RightVector
+		local dashDir = (moveDir:Dot(rightVec) > 0) and rightVec or -rightVec
+
+		local velocity = Instance.new("BodyVelocity")
+		velocity.Velocity = dashDir * dashPower
+		velocity.MaxForce = Vector3.new(1e5, 0, 1e5)
+		velocity.Parent = hrp
+
+		game:GetService("Debris"):AddItem(velocity, dashDuration)
+	end
+
+	-- 🌌 KAVO KEYBIND USING Section:NewKeybind
+	-- Replace `Section` with your existing Kavo Section object
+	Section:NewKeybind("Mid-Air Side Dash", "Press to dash in mid-air", Enum.KeyCode.Q, function()
+		doDash()
+	end)
+	local Scripts = Window:NewTab("Scripts")
+	local Section = Scripts:NewSection("Scripts")
+
+
+	Section:NewButton("Bytes", "ButtonInfo", function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Bytescode42/BytesCodeChaos/refs/heads/main/BytesChaos.lua"))()
+	end)
+
+
+	Section:NewButton("Notalive", "ButtonInfo", function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/notaliveinfinity/notalive-chaos/refs/heads/main/notalive"))()
+	end)
+
+
+	local WeaponsTab = Window:NewTab("Weapons")
+	local WeaponsSection = WeaponsTab:NewSection("Select Weapon")
+
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+
+	-- Available weapons
+	local weaponList = {
+		"Emerald Greatsword",
+		"Blood Dagger",
+		"Frost Spear"
+	}
+
+	-- Store selected weapon
+	local selectedWeapon = nil
+
+	-- Function to equip a weapon
+	local function EquipWeapon(weaponName)
+		if not weaponName then return end
+		local args = { weaponName }
+		LocalPlayer.PlayerGui["Menu Screen"].RemoteEvent:FireServer(unpack(args))
+	end
+
+	-- Dropdown for weapon selection
+	WeaponsSection:NewDropdown("Choose Weapon", "Select the weapon to auto-equip", weaponList, function(option)
+		selectedWeapon = option
+		print("Selected Weapon:", selectedWeapon)
+	end)
+
+	-- Toggle for auto equip
+	local deathConnection = nil
+
+	WeaponsSection:NewToggle("Auto Equip Selected Weapon", "Automatically re-equips selected weapon", function(state)
+		if state then
+			print("Auto Equip ON")
+
+			-- Equip once immediately
+			EquipWeapon(selectedWeapon)
+
+			-- Auto re-equip on respawn
+			deathConnection = LocalPlayer.CharacterAdded:Connect(function()
+				task.wait(1)
+				EquipWeapon(selectedWeapon)
+			end)
+
+		else
+			print("Auto Equip OFF")
+			if deathConnection then
+				deathConnection:Disconnect()
+				deathConnection = nil
+			end
+		end
+	end)
+
+
+	-- 🌌 ESP Tab
+local ESP_Tab = Window:NewTab("ESP")
+local ESP_Section = ESP_Tab:NewSection("Player Highlights")
+
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+local CoreGui = game:FindService("CoreGui")
+
+-- Highlight settings
+local FillColor = Color3.fromRGB(175,25,255)
+local DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+local FillTransparency = 0.5
+local OutlineColor = Color3.fromRGB(255,255,255)
+local OutlineTransparency = 0
+
+-- Storage
+local Storage = Instance.new("Folder")
+Storage.Name = "Highlight_Storage"
+Storage.Parent = CoreGui
+
+-- Table to store active highlights
+local Highlights = {}
+local SelectedPlayer = nil
+local ESPEnabled = false
+
+-- Function to create highlight
+local function HighlightPlayer(plr)
+	if Highlights[plr.Name] then return end
+	local highlight = Instance.new("Highlight")
+	highlight.Name = plr.Name
+	highlight.FillColor = FillColor
+	highlight.DepthMode = DepthMode
+	highlight.FillTransparency = FillTransparency
+	highlight.OutlineColor = OutlineColor
+	highlight.OutlineTransparency = OutlineTransparency
+	highlight.Parent = Storage
+
+	if plr.Character then
+		highlight.Adornee = plr.Character
+	end
+
+	plr.CharacterAdded:Connect(function(char)
+		if ESPEnabled and SelectedPlayer == plr then
+			highlight.Adornee = char
+		end
+	end)
+
+	Highlights[plr.Name] = highlight
+end
+
+-- Remove all highlights
+local function RemoveAllHighlights()
+	for _, highlight in pairs(Highlights) do
+		highlight:Destroy()
+	end
+	Highlights = {}
+end
+
+-- Get player list excluding local player
+local function GetPlayerList()
+	local list = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= lp then
+			table.insert(list, plr.Name)
+		end
+	end
+	return list
+end
+
+-- Single-select dropdown
+local PlayerDropdown = ESP_Section:NewDropdown("Select Player", "Pick a player to highlight", GetPlayerList(), function(option)
+	SelectedPlayer = Players:FindFirstChild(option)
+	if ESPEnabled and SelectedPlayer then
+		HighlightPlayer(SelectedPlayer)
+	end
+end)
+
+-- Toggle to enable/disable ESP
+ESP_Section:NewToggle("Enable ESP", "Toggle highlights", function(state)
+	ESPEnabled = state
+	RemoveAllHighlights()
+	if ESPEnabled and SelectedPlayer then
+		HighlightPlayer(SelectedPlayer)
+	end
+end)
+
+-- Color picker for highlight
+ESP_Section:NewColorPicker("Highlight Color", "Pick highlight color", FillColor, function(color)
+	FillColor = color
+	for _, highlight in pairs(Highlights) do
+		highlight.FillColor = FillColor
+	end
+end)
+
+-- Button to refresh dropdown options
+ESP_Section:NewButton("Refresh Player List", "Update dropdown to include new players", function()
+	PlayerDropdown:Refresh(GetPlayerList())
+end)
+
+-- Remove highlights when players leave
+Players.PlayerRemoving:Connect(function(plr)
+	if Highlights[plr.Name] then
+		Highlights[plr.Name]:Destroy()
+		Highlights[plr.Name] = nil
+	end
+	if SelectedPlayer == plr then
+		SelectedPlayer = nil
+	end
+end)
+
+-- Add this to your existing Kavo script AFTER Window creation (e.g., after local Window = Library.CreateLib(...))
+-- Creates a "Movement" tab with Knife Dash keybind (default: Q)
+
+local Tab = Window:NewTab("Movement")
+local Section = Tab:NewSection("Knife Dash")
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local Debris = game:GetService("Debris")
+
+local dashPower = 200
+local dashDuration = 0.6
+local jumpBoost = 0
+local jumpBoostDuration = 0
+
+local jumpBoostActive = false
+
+local function doDash()
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    -- Equip Throwing Knife
+    local tool = char:FindFirstChild("Throwing Knife") or LocalPlayer.Backpack:FindFirstChild("Throwing Knife")
+    if tool then
+        tool.Parent = char
+    end
+
+    -- Simulate Backspace press to throw knife
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Backspace, false)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Backspace, false)
+    end)
+
+    -- Temporary jump boost (disabled)
+    if not jumpBoostActive then
+        jumpBoostActive = true
+        local originalJP = hum.JumpPower
+        hum.JumpPower = originalJP + jumpBoost
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        
+        task.delay(jumpBoostDuration, function()
+            if hum and hum.Parent then
+                hum.JumpPower = originalJP
+            end
+            jumpBoostActive = false
+        end)
+    end
+
+    -- Forward dash
+    local forwardDir = hrp.CFrame.LookVector
+    local velocity = Instance.new("BodyVelocity")
+    velocity.Velocity = forwardDir * dashPower
+    velocity.MaxForce = Vector3.new(1e5, 0, 1e5)
+    velocity.Parent = hrp
+    Debris:AddItem(velocity, dashDuration)
+end
+
+-- Kavo Keybind: Press bound key (default Q) to dash! Change key in UI.
+Section:NewKeybind("Knife Dash", "Forward dash + knife throw", Enum.KeyCode.Q, function()
+    doDash()
+end)
+
+Section:NewKeybind("Toggle UI", "Show/Hide the UI", Enum.KeyCode.F6, function()
+    Library:ToggleUI()
+end)
+
+
+local MainTab = Window:NewTab("Players")
+local PlayerSection = MainTab:NewSection("Player Hacks")
+
+-- Infinite Jump Toggle
+local infJumpEnabled = false
+local infJumpConnection
+
+PlayerSection:NewToggle("Infinite Jump", "Allows you to jump repeatedly in mid-air", function(state)
+    if state then
+        infJumpEnabled = true
+        infJumpConnection = game:GetService("UserInputService").JumpRequest:Connect(function()
+            if infJumpEnabled then
+                game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+            end
+        end)
+        local Callback = Instance.new("BindableFunction")
+		function Callback.OnInvoke(Button)
+			
+		end
+		game:GetService("StarterGui"):SetCore("SendNotification", {
+			Title = "inf jump on",
+			Text = "inf jump on",
+			Icon = "nil",
+			Duration = 5,
+			Callback = Callback,
+			Button1 = ok,
+			Button2 = ok,
+		})
+		Callback:Destroy()("Infinite Jump: ON")
+    else
+        infJumpEnabled = false
+        if infJumpConnection then
+            infJumpConnection:Disconnect()
+        end
+        local Callback = Instance.new("BindableFunction")
+		function Callback.OnInvoke(Button)
+			
+		end
+		game:GetService("StarterGui"):SetCore("SendNotification", {
+			Title = "Inf jump off",
+			Text = "inf jump off",
+			Icon = "nil",
+			Duration = 5,
+			Callback = Callback,
+			Button1 = ok,
+			Button2 = ok,
+		})
+		Callback:Destroy()("Infinite Jump: OFF")
+    end
+end)
+
+
+PlayerSection:NewButton("Click Teleport", "Gives you a tool - equip it and click anywhere to teleport there", function()
+    local player = game.Players.LocalPlayer
+    local mouse = player:GetMouse()
+    
+    -- Check if the tool already exists to avoid duplicates
+    local existingTool = player.Backpack:FindFirstChild("Click TP Tool") or (player.Character and player.Character:FindFirstChild("Click TP Tool"))
+    
+    if existingTool then
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Click Teleport",
+            Text = "You already have the tool! Check your backpack.",
+            Duration = 4
+        })
+        return
+    end
+    
+    -- Create the tool
+    local clickTPTool = Instance.new("Tool")
+    clickTPTool.Name = "Click TP Tool"
+    clickTPTool.RequiresHandle = false
+    clickTPTool.CanBeDropped = false
+    
+    clickTPTool.Activated:Connect(function()
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local targetPos = mouse.Hit.Position + Vector3.new(0, 3, 0)
+            player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos)
+        end
+    end)
+    
+    clickTPTool.Parent = player.Backpack
+    
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "Click Teleport",
+        Text = "Tool added to your backpack! Equip it and click where you want to go.",
+        Duration = 6
+    })
+end)
+
+
+PlayerSection:NewToggle("Hidden Fling", "Secretly flings anyone near you (anti-fling detection)", function(state)
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local StarterGui = game:GetService("StarterGui")
+    
+    local player = Players.LocalPlayer
+    
+    -- Create detection object once
+    if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
+        local detection = Instance.new("Decal")
+        detection.Name = "juisdfj0i32i0eidsuf0iok"
+        detection.Parent = ReplicatedStorage
+    end
+    
+    -- Persistent variables stored in the player's attributes to survive multiple toggles
+    if player:GetAttribute("HiddenFlingActive") == nil then
+        player:SetAttribute("HiddenFlingActive", false)
+    end
+    
+    local function notify(text, duration)
+        StarterGui:SetCore("SendNotification", {
+            Title = "Hidden Fling",
+            Text = text,
+            Duration = duration or 4
+        })
+    end
+    
+    if state then
+        -- TURN ON
+        if player:GetAttribute("HiddenFlingActive") then
+            notify("Already enabled!", 3)
+            return
+        end
+        
+        player:SetAttribute("HiddenFlingActive", true)
+        
+        local movel = 0.1
+        
+        spawn(function()
+            while player:GetAttribute("HiddenFlingActive") do
+                RunService.Heartbeat:Wait()
+                
+                local character = player.Character
+                if not character then continue end
+                
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if not hrp then continue end
+                
+                local vel = hrp.Velocity
+                
+                hrp.Velocity = vel * 10000 + Vector3.new(0, 10000, 0)
+                RunService.RenderStepped:Wait()
+                hrp.Velocity = vel
+                RunService.Stepped:Wait()
+                hrp.Velocity = vel + Vector3.new(0, movel, 0)
+                movel = -movel
+            end
+        end)
+        
+        notify("Enabled - Flinging active!", 4)
+        
+    else
+        -- TURN OFF
+        player:SetAttribute("HiddenFlingActive", false)
+        
+        notify("Disabled", 3)
+    end
+end)return
